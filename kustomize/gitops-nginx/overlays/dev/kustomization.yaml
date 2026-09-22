@@ -11,10 +11,6 @@ replicas:
   - name: gitops-nginx
     count: 2
 
-images:
-  - name: nginx
-    newTag: "1.30"
-
 labels:
   - pairs:
       environment: dev
