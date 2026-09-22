@@ -9,7 +9,7 @@ resources:
 
 replicas:
   - name: gitops-nginx
-    count: 5
+    count: 6
 
 patches:
   - path: service-patch.yaml
