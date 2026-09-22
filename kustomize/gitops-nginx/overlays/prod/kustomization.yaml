@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: gitops-prod
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+replicas:
+  - name: gitops-nginx
+    count: 5
+
+patches:
+  - path: service-patch.yaml
+
+labels:
+  - pairs:
+      environment: prod
