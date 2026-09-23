@@ -24,3 +24,13 @@ jobs:
       - name: Validate Dockerfile
         run: |
           docker build --check ./app
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t aks-demo:${{ github.sha }} \
+            ./app
+
+      - name: Show Docker image
+        run: |
+          docker images
