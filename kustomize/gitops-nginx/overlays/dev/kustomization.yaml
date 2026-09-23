@@ -20,3 +20,6 @@ labels:
       environment: dev
     includeSelectors: false
     includeTemplates: true
+    include:
+      - deployment
+      - service
