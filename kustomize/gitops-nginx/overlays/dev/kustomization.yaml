@@ -5,12 +5,15 @@ namespace: gitops-dev
 
 resources:
   - ../../base
-  - namespace.yaml
 
 replicas:
   - name: gitops-nginx
     count: 2
 
-labels:
-  - pairs:
-      environment: dev
+images:
+  - name: nginx
+    newName: acrgitopslab11068.azurecr.io/aks-demo
+    newTag: "latest"
+
+commonLabels:
+  environment: dev
