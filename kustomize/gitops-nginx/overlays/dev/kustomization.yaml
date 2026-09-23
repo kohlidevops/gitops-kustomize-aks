@@ -13,7 +13,7 @@ replicas:
 images:
   - name: nginx
     newName: acrgitopslab11068.azurecr.io/aks-demo
-    newTag: "latest"
+    newTag: "fca715780cf95a54b5e4a1d1b9795b96bfdd4193"
 
 commonLabels:
   environment: dev
