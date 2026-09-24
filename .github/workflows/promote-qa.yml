@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout DEV
         uses: actions/checkout@v4
         with:
@@ -28,12 +27,36 @@ jobs:
           echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Update QA image
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          sed -i 's|newTag: ".*"|newTag: "${{ steps.image.outputs.tag }}"|' \
-            kustomize/gitops-nginx/overlays/qa/kustomization.yaml
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          path = Path("kustomize/gitops-nginx/overlays/qa/kustomization.yaml")
+          text = path.read_text()
+
+          start = text.index("images:")
+
+          try:
+              end = text.index("\nlabels:", start)
+          except ValueError:
+              end = len(text)
+
+          image_block = f'''images:
+            - name: nginx
+              newName: "acrgitopslab11068.azurecr.io/aks-demo"
+              newTag: "{os.environ["IMAGE_TAG"]}"
+          '''
+
+          text = text[:start] + image_block + text[end:]
+          path.write_text(text)
+          PY
 
       - name: Show QA manifest
         run: |
+          echo "Updated QA manifest:"
           cat kustomize/gitops-nginx/overlays/qa/kustomization.yaml
 
       - name: Create QA promotion PR
@@ -55,4 +78,5 @@ jobs:
             This PR updates the QA GitOps manifest.
 
             After merge, Argo CD will reconcile the QA environment.
-          delete-branch: false
+
+          delete-branch: true
