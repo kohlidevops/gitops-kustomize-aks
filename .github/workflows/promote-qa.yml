@@ -1,0 +1,87 @@
+name: Promote DEV to QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote-to-qa:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # 1. Checkout DEV branch
+      - name: Checkout DEV
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      # 2. Read DEV image tag
+      - name: Read DEV image tag
+        id: image
+        run: |
+          IMAGE_TAG=$(grep 'newTag:' kustomize/gitops-nginx/overlays/dev/kustomization.yaml | sed 's/.*newTag: "\(.*\)"/\1/')
+
+          echo "DEV image tag: $IMAGE_TAG"
+
+          echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # 3. Create promotion branch
+      - name: Create promotion branch
+        run: |
+          git checkout -b promote-to-qa
+
+      # 4. Update QA image reference
+      - name: Update QA image
+        run: |
+          sed -i 's|newTag: ".*"|newTag: "${{ steps.image.outputs.tag }}"|' \
+            kustomize/gitops-nginx/overlays/qa/kustomization.yaml
+
+          sed -i '/newName:/!b; n' \
+            kustomize/gitops-nginx/overlays/qa/kustomization.yaml
+
+      # 5. Show QA change
+      - name: Show QA manifest
+        run: |
+          cat kustomize/gitops-nginx/overlays/qa/kustomization.yaml
+
+      # 6. Commit promotion
+      - name: Commit promotion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add kustomize/gitops-nginx/overlays/qa/kustomization.yaml
+
+          git commit \
+            -m "Promote image ${{ steps.image.outputs.tag }} to QA"
+
+      # 7. Push promotion branch
+      - name: Push promotion branch
+        run: |
+          git push origin promote-to-qa
+
+      # 8. Create QA promotion PR
+      - name: Create QA promotion PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: promote-to-qa
+          base: qa
+          title: "Promote ${{ steps.image.outputs.tag }} to QA"
+          body: |
+            ## QA Promotion
+
+            Promoting the DEV image to QA.
+
+            **Image:**
+
+            `acrgitopslab11068.azurecr.io/aks-demo:${{ steps.image.outputs.tag }}`
+
+            This PR updates the QA GitOps manifest.
+
+            After merge, Argo CD will reconcile the QA environment.
+          delete-branch: false
