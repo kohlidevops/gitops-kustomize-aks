@@ -13,6 +13,7 @@ replicas:
 
 images:
   - name: nginx
+    newName: "acrgitopslab11068.azurecr.io/aks-demo"
     newTag: "26a905a91b611cd1c8919daaba7a9ce56368a302"
 
 labels:
