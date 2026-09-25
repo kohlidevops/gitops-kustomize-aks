@@ -14,7 +14,7 @@ replicas:
 images:
   - name: nginx
     newName: "acrgitopslab11068.azurecr.io/aks-demo"
-    newTag: "fc9119d81705440bc76a93222f041ab7fed918cb"
+    newTag: "a945cd82fe08ad0e1f7e16006337cb5733d7e6d9"
 
 patches:
   - path: service-patch.yaml
