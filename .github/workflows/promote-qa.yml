@@ -12,8 +12,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       # --------------------------------------------------
-      # Step 1: Checkout DEV
+      # Step 1: Read image SHA from DEV
       # --------------------------------------------------
       - name: Checkout DEV
         uses: actions/checkout@v4
@@ -21,10 +22,6 @@ jobs:
           ref: dev
           fetch-depth: 0
 
-      # --------------------------------------------------
-      # Step 2: Read the image SHA currently deployed
-      # in DEV
-      # --------------------------------------------------
       - name: Read DEV image tag
         id: image
         run: |
@@ -36,7 +33,7 @@ jobs:
           echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       # --------------------------------------------------
-      # Step 3: Checkout QA branch
+      # Step 2: Checkout QA branch
       # --------------------------------------------------
       - name: Checkout QA
         uses: actions/checkout@v4
@@ -45,7 +42,7 @@ jobs:
           fetch-depth: 0
 
       # --------------------------------------------------
-      # Step 4: Update QA image
+      # Step 3: Replace the complete QA images section
       # --------------------------------------------------
       - name: Update QA image
         env:
@@ -54,6 +51,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import os
+          import re
 
           path = Path(
               "kustomize/gitops-nginx/overlays/qa/kustomization.yaml"
@@ -61,26 +59,29 @@ jobs:
 
           text = path.read_text()
 
-          start = text.index("images:")
+          new_tag = os.environ["IMAGE_TAG"]
 
-          try:
-              end = text.index("\nlabels:", start)
-          except ValueError:
-              end = len(text)
+          pattern = r'(?ms)^images:\n.*?(?=^labels:)'
 
-          image_block = f'''images:
+          replacement = f'''images:
             - name: nginx
               newName: "acrgitopslab11068.azurecr.io/aks-demo"
-              newTag: "{os.environ["IMAGE_TAG"]}"
+              newTag: "{new_tag}"
+
           '''
 
-          text = text[:start] + image_block + text[end:]
+          updated, count = re.subn(pattern, replacement, text)
 
-          path.write_text(text)
+          if count != 1:
+              raise SystemExit(
+                  f"Expected exactly one images section, found {count}"
+              )
+
+          path.write_text(updated)
           PY
 
       # --------------------------------------------------
-      # Step 5: Display the resulting QA manifest
+      # Step 4: Verify the generated QA manifest
       # --------------------------------------------------
       - name: Show QA manifest
         run: |
@@ -91,7 +92,7 @@ jobs:
           cat kustomize/gitops-nginx/overlays/qa/kustomization.yaml
 
       # --------------------------------------------------
-      # Step 6: Create QA promotion PR
+      # Step 5: Create QA promotion PR
       # --------------------------------------------------
       - name: Create QA promotion PR
         uses: peter-evans/create-pull-request@v7
