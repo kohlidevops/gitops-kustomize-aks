@@ -12,20 +12,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --------------------------------------------------
+      # Step 1: Checkout DEV
+      # --------------------------------------------------
       - name: Checkout DEV
         uses: actions/checkout@v4
         with:
           ref: dev
           fetch-depth: 0
 
+      # --------------------------------------------------
+      # Step 2: Read the image SHA currently deployed
+      # in DEV
+      # --------------------------------------------------
       - name: Read DEV image tag
         id: image
         run: |
-          IMAGE_TAG=$(grep 'newTag:' kustomize/gitops-nginx/overlays/dev/kustomization.yaml | sed 's/.*newTag: "\(.*\)"/\1/')
+          IMAGE_TAG=$(grep 'newTag:' \
+            kustomize/gitops-nginx/overlays/dev/kustomization.yaml \
+            | sed 's/.*newTag: "\(.*\)"/\1/')
 
           echo "DEV image tag: $IMAGE_TAG"
           echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
+      # --------------------------------------------------
+      # Step 3: Checkout QA branch
+      # --------------------------------------------------
+      - name: Checkout QA
+        uses: actions/checkout@v4
+        with:
+          ref: qa
+          fetch-depth: 0
+
+      # --------------------------------------------------
+      # Step 4: Update QA image
+      # --------------------------------------------------
       - name: Update QA image
         env:
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
@@ -34,7 +55,10 @@ jobs:
           from pathlib import Path
           import os
 
-          path = Path("kustomize/gitops-nginx/overlays/qa/kustomization.yaml")
+          path = Path(
+              "kustomize/gitops-nginx/overlays/qa/kustomization.yaml"
+          )
+
           text = path.read_text()
 
           start = text.index("images:")
@@ -51,14 +75,24 @@ jobs:
           '''
 
           text = text[:start] + image_block + text[end:]
+
           path.write_text(text)
           PY
 
+      # --------------------------------------------------
+      # Step 5: Display the resulting QA manifest
+      # --------------------------------------------------
       - name: Show QA manifest
         run: |
-          echo "Updated QA manifest:"
+          echo "======================================"
+          echo "QA Kustomization"
+          echo "======================================"
+
           cat kustomize/gitops-nginx/overlays/qa/kustomization.yaml
 
+      # --------------------------------------------------
+      # Step 6: Create QA promotion PR
+      # --------------------------------------------------
       - name: Create QA promotion PR
         uses: peter-evans/create-pull-request@v7
         with:
