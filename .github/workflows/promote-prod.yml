@@ -1,0 +1,136 @@
+name: Promote QA to PROD
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote-to-prod:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # --------------------------------------------------
+      # Step 1: Read image SHA from QA
+      # --------------------------------------------------
+      - name: Checkout QA
+        uses: actions/checkout@v4
+        with:
+          ref: qa
+          fetch-depth: 0
+
+      - name: Read QA image tag
+        id: image
+        run: |
+          IMAGE_TAG=$(grep 'newTag:' \
+            kustomize/gitops-nginx/overlays/qa/kustomization.yaml \
+            | sed 's/.*newTag: "\(.*\)"/\1/')
+
+          echo "QA image tag: $IMAGE_TAG"
+          echo "tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # --------------------------------------------------
+      # Step 2: Checkout PROD / main
+      # --------------------------------------------------
+      - name: Checkout PROD
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # --------------------------------------------------
+      # Step 3: Update PROD image
+      # --------------------------------------------------
+      - name: Update PROD image
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path(
+              "kustomize/gitops-nginx/overlays/prod/kustomization.yaml"
+          )
+
+          text = path.read_text()
+
+          new_tag = os.environ["IMAGE_TAG"]
+
+          image_block = f'''images:
+            - name: nginx
+              newName: "acrgitopslab11068.azurecr.io/aks-demo"
+              newTag: "{new_tag}"
+
+          '''
+
+          # If PROD already has an images section,
+          # replace the entire section.
+          if re.search(r'(?ms)^images:\n.*?(?=^patches:|^labels:)', text):
+              pattern = r'(?ms)^images:\n.*?(?=^patches:|^labels:)'
+              updated, count = re.subn(
+                  pattern,
+                  image_block,
+                  text
+              )
+
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected exactly one images section, found {count}"
+                  )
+
+              text = updated
+
+          # Otherwise insert images before patches.
+          else:
+              if "\npatches:" in text:
+                  text = text.replace(
+                      "\npatches:",
+                      "\n" + image_block + "patches:",
+                      1
+                  )
+              else:
+                  text = text.rstrip() + "\n\n" + image_block
+
+          path.write_text(text)
+          PY
+
+      # --------------------------------------------------
+      # Step 4: Show PROD manifest
+      # --------------------------------------------------
+      - name: Show PROD manifest
+        run: |
+          echo "======================================"
+          echo "PROD Kustomization"
+          echo "======================================"
+
+          cat kustomize/gitops-nginx/overlays/prod/kustomization.yaml
+
+      # --------------------------------------------------
+      # Step 5: Create PROD promotion PR
+      # --------------------------------------------------
+      - name: Create PROD promotion PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: promote-to-prod
+          base: main
+          title: "Promote ${{ steps.image.outputs.tag }} to PROD"
+          commit-message: "Promote image ${{ steps.image.outputs.tag }} to PROD"
+          body: |
+            ## PROD Promotion
+
+            Promoting the QA-approved image to PROD.
+
+            **Image:**
+
+            `acrgitopslab11068.azurecr.io/aks-demo:${{ steps.image.outputs.tag }}`
+
+            This PR updates the PROD GitOps manifest.
+
+            After merge, Argo CD will reconcile the PROD environment.
+
+          delete-branch: true
